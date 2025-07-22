@@ -80,7 +80,7 @@ app.get('/entregar/:id', (req, res) => {
   db.run(
     `UPDATE pedidos SET status = 'Entregue' WHERE id = ?`,
     [req.params.id],
-    () => res.redirect('/pedidos')
+    () => res.redirect('/vendedor')
   );
 });
 
