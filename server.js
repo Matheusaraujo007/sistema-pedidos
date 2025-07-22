@@ -4,7 +4,7 @@ const path = require('path');
 const app = express();
 const db = new sqlite3.Database('./database.db');
 
-// --- Cria tabela se não existir ---
+// --- Criação da tabela ---
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS pedidos (
@@ -19,111 +19,88 @@ db.serialize(() => {
   `);
 });
 
-// --- Middlewares ---
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'index')));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// --- Rota principal: formulário de novo pedido ---
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+// --- Rotas do Vendedor ---
+
+// Formulário do vendedor
+app.get('/vendedor', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'vendedor.html'));
 });
 
-// --- Cadastrar pedido ---
-app.post('/pedido', (req, res) => {
+// Envia pedido
+app.post('/vendedor/pedido', (req, res) => {
   const { vendedor, cliente, produto, quantidade, valor } = req.body;
   db.run(
     `INSERT INTO pedidos (vendedor, cliente, produto, quantidade, valor) VALUES (?, ?, ?, ?, ?)`,
     [vendedor, cliente, produto, quantidade, valor],
-    () => res.redirect('/')
+    () => res.redirect('/vendedor')
   );
 });
 
-// --- Listar pedidos simples (tabela HTML) ---
-app.get('/pedidos', (req, res) => {
-  db.all(`SELECT * FROM pedidos`, [], (err, rows) => {
-    let html = `
-      <h1>Pedidos Recebidos</h1>
+// Lista os pedidos do vendedor específico (simulação sem login, usando query)
+app.get('/vendedor/pedidos', (req, res) => {
+  const vendedor = req.query.vendedor;
+  db.all(`SELECT * FROM pedidos WHERE vendedor = ?`, [vendedor], (err, rows) => {
+    let html = `<h1>Pedidos de ${vendedor}</h1>
       <table border="1" cellpadding="8" cellspacing="0">
-        <tr>
-          <th>ID</th><th>Vendedor</th><th>Cliente</th><th>Produto</th>
-          <th>Qtd</th><th>Valor</th><th>Status</th><th>Ação</th>
-        </tr>`;
+      <tr>
+        <th>ID</th><th>Cliente</th><th>Produto</th><th>Qtd</th><th>Valor</th><th>Status</th>
+      </tr>`;
     rows.forEach(p => {
       html += `
         <tr>
-          <td>${p.id}</td>
-          <td>${p.vendedor}</td>
-          <td>${p.cliente}</td>
-          <td>${p.produto}</td>
-          <td>${p.quantidade}</td>
-          <td>R$ ${p.valor.toFixed(2)}</td>
-          <td>${p.status}</td>
-          <td>${p.status !== 'Entregue'
-            ? `<a href="/entregar/${p.id}">Entregar</a>`
-            : ''
-          }</td>
+          <td>${p.id}</td><td>${p.cliente}</td><td>${p.produto}</td>
+          <td>${p.quantidade}</td><td>R$ ${p.valor.toFixed(2)}</td><td>${p.status}</td>
         </tr>`;
     });
-    html += `</table><br><a href="/">Voltar</a>`;
+    html += `</table><br><a href="/vendedor">Voltar</a>`;
     res.send(html);
   });
 });
 
-// --- Rota de entrega (muda status) ---
-app.get('/entregar/:id', (req, res) => {
-  db.run(
-    `UPDATE pedidos SET status = 'Entregue' WHERE id = ?`,
-    [req.params.id],
-    () => res.redirect('/pedidos')
-  );
-});
+// --- Dashboard Administrativo ---
 
-// --- Dashboard com estatísticas e lista completa ---
 app.get('/dashboard', (req, res) => {
   db.all(`SELECT * FROM pedidos`, [], (err, rows) => {
-    const totalPedidos  = rows.length;
-    const totalValor    = rows.reduce((acc, p) => acc + p.valor, 0);
-    const entregues     = rows.filter(p => p.status === 'Entregue').length;
-    const pendentes     = totalPedidos - entregues;
-
-    let html = `
-      <h1>📊 Dashboard de Pedidos</h1>
-      <ul>
-        <li><strong>Total de Pedidos:</strong> ${totalPedidos}</li>
-        <li><strong>Pedidos Entregues:</strong> ${entregues}</li>
-        <li><strong>Pedidos Pendentes:</strong> ${pendentes}</li>
-        <li><strong>Total Vendido:</strong> R$ ${totalValor.toFixed(2)}</li>
-      </ul>
-      <h2>Lista de Pedidos</h2>
+    let html = `<h1>Dashboard Administrativo</h1>
       <table border="1" cellpadding="8" cellspacing="0">
-        <tr>
-          <th>ID</th><th>Vendedor</th><th>Cliente</th><th>Produto</th>
-          <th>Qtd</th><th>Valor</th><th>Status</th><th>Ação</th>
-        </tr>`;
+      <tr>
+        <th>ID</th><th>Vendedor</th><th>Cliente</th><th>Produto</th><th>Qtd</th><th>Valor</th><th>Status</th><th>Ação</th>
+      </tr>`;
     rows.forEach(p => {
       html += `
         <tr>
-          <td>${p.id}</td>
-          <td>${p.vendedor}</td>
-          <td>${p.cliente}</td>
-          <td>${p.produto}</td>
-          <td>${p.quantidade}</td>
-          <td>R$ ${p.valor.toFixed(2)}</td>
-          <td>${p.status}</td>
-          <td>${p.status !== 'Entregue'
-            ? `<a href="/entregar/${p.id}">Entregar</a>`
-            : ''
-          }</td>
+          <td>${p.id}</td><td>${p.vendedor}</td><td>${p.cliente}</td><td>${p.produto}</td>
+          <td>${p.quantidade}</td><td>R$ ${p.valor.toFixed(2)}</td><td>${p.status}</td>
+          <td>
+            ${p.status !== 'Finalizado' ? `
+              <form method="GET" action="/mudar-status/${p.id}" style="display:inline;">
+                <select name="novoStatus">
+                  <option ${p.status === 'Aguardando Retorno' ? 'selected' : ''}>Aguardando Retorno</option>
+                  <option ${p.status === 'Arte Aprovada' ? 'selected' : ''}>Arte Aprovada</option>
+                  <option ${p.status === 'Produzindo' ? 'selected' : ''}>Produzindo</option>
+                  <option ${p.status === 'Finalizado' ? 'selected' : ''}>Finalizado</option>
+                </select>
+                <button type="submit">Atualizar</button>
+              </form>` : 'Pedido Finalizado'
+            }
+          </td>
         </tr>`;
     });
-    html += `</table><br><a href="/">Voltar</a>`;
+    html += `</table>`;
     res.send(html);
   });
 });
 
-// --- Tratamento 404 para rotas não definidas ---
-app.use((req, res) => {
-  res.status(404).send('Página não encontrada 😕');
+// Atualiza status do pedido
+app.get('/mudar-status/:id', (req, res) => {
+  const { id } = req.params;
+  const { novoStatus } = req.query;
+  db.run(`UPDATE pedidos SET status = ? WHERE id = ?`, [novoStatus, id], () => {
+    res.redirect('/dashboard');
+  });
 });
 
 // --- Inicia servidor ---
