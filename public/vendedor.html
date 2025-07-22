@@ -79,17 +79,37 @@
   <div class="container">
     <h2>📋 Cadastro de Pedido</h2>
     <form action="/pedido" method="POST">
-      <input type="text" name="vendedor" placeholder="Vendedor" required>
+      <input type="text" name="vendedor" placeholder="Seu Nome" required>
       <input type="text" name="cliente" placeholder="Nome do Cliente" required>
       <input type="text" name="telefone_cliente" placeholder="Telefone do Cliente" required>
       <input type="text" name="produto" placeholder="Produto" required>
       <input type="number" name="quantidade" placeholder="Quantidade" required min="1">
       <input type="number" name="valor" placeholder="Valor Total (R$)" step="0.01" required min="0.01">
+      <!-- Campo data do pedido -->
+      <input type="text" name="data_pedido" placeholder="Data do Pedido" value="{{ new Date().toLocaleDateString() }}" readonly>
+      <!-- Campo previsão de entrega -->
+      <input type="text" name="previsao_entrega" placeholder="Previsão de Entrega" value="{{ new Date().addDays(5).toLocaleDateString() }}" readonly>
       <button type="submit">📨 Enviar Pedido</button>
     </form>
 
     <a class="link" href="/pedidos">🔍 Ver Meus Pedidos</a>
   </div>
+
+  <script>
+    // Função para calcular a data de entrega adicionando dias úteis
+    Date.prototype.addDays = function(days) {
+      var result = new Date(this);
+      var count = 0;
+      while (count < days) {
+        result.setDate(result.getDate() + 1);
+        // Verifica se o dia é um sábado (6) ou domingo (0), e se for, não conta.
+        if (result.getDay() !== 0 && result.getDay() !== 6) {
+          count++;
+        }
+      }
+      return result;
+    };
+  </script>
 
 </body>
 </html>
