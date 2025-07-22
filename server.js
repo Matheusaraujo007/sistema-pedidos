@@ -21,7 +21,7 @@ db.serialize(() => {
 
 // --- Middlewares ---
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'index')));
 
 // --- Rota principal: formulário de novo pedido ---
 app.get('/', (req, res) => {
