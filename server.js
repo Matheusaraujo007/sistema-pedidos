@@ -11,10 +11,12 @@ db.serialize(() => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       vendedor TEXT,
       cliente TEXT,
-      telefone TEXT,
+      telefone_cliente TEXT,
       produto TEXT,
       quantidade INTEGER,
       valor REAL,
+      data_pedido TEXT,
+      previsao_entrega TEXT,
       status TEXT DEFAULT 'Recebido'
     )
   `);
@@ -24,30 +26,31 @@ db.serialize(() => {
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- Tela do vendedor ---
-app.get('/vendedor', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'vendedor.html'));
+// --- Rota principal: formulário de novo pedido ---
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // --- Cadastrar pedido ---
 app.post('/pedido', (req, res) => {
-  const { vendedor, cliente, telefone, produto, quantidade, valor } = req.body;
+  const { vendedor, cliente, telefone_cliente, produto, quantidade, valor, data_pedido, previsao_entrega } = req.body;
+
   db.run(
-    `INSERT INTO pedidos (vendedor, cliente, telefone, produto, quantidade, valor) VALUES (?, ?, ?, ?, ?, ?)`,
-    [vendedor, cliente, telefone, produto, quantidade, valor],
-    () => res.redirect('/vendedor')
+    `INSERT INTO pedidos (vendedor, cliente, telefone_cliente, produto, quantidade, valor, data_pedido, previsao_entrega) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [vendedor, cliente, telefone_cliente, produto, quantidade, valor, data_pedido, previsao_entrega],
+    () => res.redirect('/')
   );
 });
 
-// --- Listar pedidos do vendedor ---
+// --- Listar pedidos simples (tabela HTML) ---
 app.get('/pedidos', (req, res) => {
   db.all(`SELECT * FROM pedidos`, [], (err, rows) => {
     let html = `
       <h1>Pedidos Recebidos</h1>
       <table border="1" cellpadding="8" cellspacing="0">
         <tr>
-          <th>ID</th><th>Vendedor</th><th>Cliente</th><th>Telefone</th><th>Produto</th>
-          <th>Qtd</th><th>Valor</th><th>Status</th><th>Ação</th>
+          <th>ID</th><th>Vendedor</th><th>Cliente</th><th>Produto</th>
+          <th>Qtd</th><th>Valor</th><th>Status</th><th>Data do Pedido</th><th>Previsão de Entrega</th><th>Ação</th>
         </tr>`;
     rows.forEach(p => {
       html += `
@@ -55,23 +58,24 @@ app.get('/pedidos', (req, res) => {
           <td>${p.id}</td>
           <td>${p.vendedor}</td>
           <td>${p.cliente}</td>
-          <td>${p.telefone}</td>
           <td>${p.produto}</td>
           <td>${p.quantidade}</td>
           <td>R$ ${p.valor.toFixed(2)}</td>
           <td>${p.status}</td>
+          <td>${p.data_pedido}</td>
+          <td>${p.previsao_entrega}</td>
           <td>${p.status !== 'Entregue'
             ? `<a href="/entregar/${p.id}">Entregar</a>`
             : ''
           }</td>
         </tr>`;
     });
-    html += `</table><br><a href="/vendedor">Voltar</a>`;
+    html += `</table><br><a href="/">Voltar</a>`;
     res.send(html);
   });
 });
 
-// --- Mudar status para Entregue ---
+// --- Rota de entrega (muda status) ---
 app.get('/entregar/:id', (req, res) => {
   db.run(
     `UPDATE pedidos SET status = 'Entregue' WHERE id = ?`,
@@ -80,13 +84,13 @@ app.get('/entregar/:id', (req, res) => {
   );
 });
 
-// --- Dashboard completo ---
+// --- Dashboard com estatísticas e lista completa ---
 app.get('/dashboard', (req, res) => {
   db.all(`SELECT * FROM pedidos`, [], (err, rows) => {
-    const totalPedidos = rows.length;
-    const totalValor = rows.reduce((acc, p) => acc + p.valor, 0);
-    const entregues = rows.filter(p => p.status === 'Entregue').length;
-    const pendentes = totalPedidos - entregues;
+    const totalPedidos  = rows.length;
+    const totalValor    = rows.reduce((acc, p) => acc + p.valor, 0);
+    const entregues     = rows.filter(p => p.status === 'Entregue').length;
+    const pendentes     = totalPedidos - entregues;
 
     let html = `
       <h1>📊 Dashboard de Pedidos</h1>
@@ -96,12 +100,11 @@ app.get('/dashboard', (req, res) => {
         <li><strong>Pedidos Pendentes:</strong> ${pendentes}</li>
         <li><strong>Total Vendido:</strong> R$ ${totalValor.toFixed(2)}</li>
       </ul>
-
       <h2>Lista de Pedidos</h2>
       <table border="1" cellpadding="8" cellspacing="0">
         <tr>
-          <th>ID</th><th>Vendedor</th><th>Cliente</th><th>Telefone</th><th>Produto</th>
-          <th>Qtd</th><th>Valor</th><th>Status</th><th>Ação</th>
+          <th>ID</th><th>Vendedor</th><th>Cliente</th><th>Produto</th>
+          <th>Qtd</th><th>Valor</th><th>Status</th><th>Data do Pedido</th><th>Previsão de Entrega</th><th>Ação</th>
         </tr>`;
     rows.forEach(p => {
       html += `
@@ -109,45 +112,30 @@ app.get('/dashboard', (req, res) => {
           <td>${p.id}</td>
           <td>${p.vendedor}</td>
           <td>${p.cliente}</td>
-          <td>${p.telefone}</td>
           <td>${p.produto}</td>
           <td>${p.quantidade}</td>
           <td>R$ ${p.valor.toFixed(2)}</td>
           <td>${p.status}</td>
-          <td>
-            <form method="POST" action="/atualizar-status/${p.id}">
-              <select name="status" onchange="this.form.submit()">
-                <option ${p.status === 'Recebido' ? 'selected' : ''}>Recebido</option>
-                <option ${p.status === 'Aguardando Retorno' ? 'selected' : ''}>Aguardando Retorno</option>
-                <option ${p.status === 'Arte Aprovada' ? 'selected' : ''}>Arte Aprovada</option>
-                <option ${p.status === 'Produzindo' ? 'selected' : ''}>Produzindo</option>
-                <option ${p.status === 'Finalizado' ? 'selected' : ''}>Finalizado</option>
-                <option ${p.status === 'Entregue' ? 'selected' : ''}>Entregue</option>
-              </select>
-            </form>
-          </td>
+          <td>${p.data_pedido}</td>
+          <td>${p.previsao_entrega}</td>
+          <td>${p.status !== 'Entregue'
+            ? `<a href="/entregar/${p.id}">Entregar</a>`
+            : ''
+          }</td>
         </tr>`;
     });
-    html += `</table><br><a href="/vendedor">Voltar</a>`;
+    html += `</table><br><a href="/">Voltar</a>`;
     res.send(html);
   });
 });
 
-// --- Atualizar status ---
-app.post('/atualizar-status/:id', (req, res) => {
-  const { status } = req.body;
-  db.run(
-    `UPDATE pedidos SET status = ? WHERE id = ?`,
-    [status, req.params.id],
-    () => res.redirect('/dashboard')
-  );
-});
-
-// --- 404 ---
+// --- Tratamento 404 para rotas não definidas ---
 app.use((req, res) => {
   res.status(404).send('Página não encontrada 😕');
 });
 
-// --- Start server ---
+// --- Inicia servidor ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Rodando em http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
